@@ -1,11 +1,10 @@
 #include <iostream>      /* for printf() and fprintf() */
 #include <cstdlib>     /* for atoi() and exit() */
 #include <cstring>     /* for memset() */
+#include <unistd.h>     /* for close() */
 
 #include <sys/socket.h> /* for socket(), connect(), sendto(), and recvfrom() */
 #include <arpa/inet.h>  /* for sockaddr_in and inet_addr() */
-
-#include <unistd.h>     /* for close() */
 
 // print error and exits
 void DieWithError(const char *errorMessage) {
@@ -14,9 +13,12 @@ void DieWithError(const char *errorMessage) {
 }
 
 int main(int argc, char *argv[]) {
+    const int RECVMAX = 255;        // longest message to receive
+
     int sock;                       // socket
     unsigned short csPort;          // client-server port
     struct sockaddr_in localAddr;   // local address
+
 
     // check format
     if(argc != 2) {
@@ -24,8 +26,7 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    // receive port
-    csPort = atoi(argv[1]);
+    csPort = atoi(argv[1]); // receive port
 
     // create socket
     if((sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
@@ -36,7 +37,6 @@ int main(int argc, char *argv[]) {
     memset(&localAddr, 0, sizeof(localAddr));    // zero out structure
     localAddr.sin_family = AF_INET;                 // address family
     localAddr.sin_addr.s_addr = htonl(INADDR_ANY);  // get local address
-    printf( "Before bind, IP address on the server is: %s\n", inet_ntoa(localAddr.sin_addr.s_addr) );
     localAddr.sin_port = htons(csPort);             // port
 
     // bind port to local address
@@ -44,8 +44,30 @@ int main(int argc, char *argv[]) {
         DieWithError("bind() failed");
     }
 
-    printf( "After bind, IP address on the server is: %s\n", inet_ntoa(localAddr.sin_addr ) );
+    printf("Port server is listening to is: %d\n", csPort);
 
+    struct sockaddr_in clientAddr;
+    unsigned int clientAddrLen;
+    char buffer[RECVMAX];
+    int rcvMsgSize;
+
+    // always on server
+    #pragma clang diagnostic push
+    #pragma ide diagnostic ignored "EndlessLoop"
+    while(true) {
+        clientAddrLen = sizeof(clientAddr);
+
+        if((rcvMsgSize = recvfrom(sock, buffer, RECVMAX, MSG_PEEK, (struct sockaddr*) &clientAddr, &clientAddrLen)) < 0) {
+            DieWithError("recvfrom() failed");
+        }
+
+        buffer[rcvMsgSize] = '\0';
+
+        printf("RCVFROM: %s - %s", inet_ntoa(clientAddr.sin_addr), buffer);
+    }
+    #pragma clang diagnostic pop
+
+    // close server
     close(sock);
     exit(0);
 }
