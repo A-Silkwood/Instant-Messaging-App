@@ -8,17 +8,20 @@
 #include <sys/socket.h> /* for socket(), connect(), sendto(), and recvfrom() */
 #include <arpa/inet.h>  /* for sockaddr_in and inet_addr() */
 
+struct contact_list;
+
 // represents a registered user
 struct user {
     std::string name;
     std::string ip;
     int port;
+    std::vector<contact_list*> clists;
 };
 
 // instant message to send out
 struct imessage {
-    std::string msg;
-    std::string author;
+    std::string clname;
+    std::string uname;
 };
 
 // stores a list of users in a im group
@@ -59,7 +62,7 @@ void param(std::string* str, std::string* cmd, int param) {
     ix++;
     int ixNext = cmd->find(' ', ix);
     if(ixNext == -1) {
-        *str = cmd->substr(ix);
+        *str = cmd->substr(ix, cmd->size() - 1 - ix);
     } else {
         *str = cmd->substr(ix, ixNext - ix);
     }
@@ -105,6 +108,7 @@ void registerUser(char* rtmsg, char* msg, std::vector<user*>* database) {
     setString(rtmsg, &rt);
 }
 
+// creates a contact lt in the server
 void createList(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
     std::string rt;
 
@@ -119,7 +123,6 @@ void createList(char* rtmsg, char* msg, std::vector<contact_list*>* contact_list
     std::string msgStr = std::string(msg);
     std::string clName;
     param(&clName, &msgStr, 1);
-    std::cout << clName << std::endl;
 
     // check if name is already in use
     for(int i = 0; i < contact_lists->size(); i++) {
@@ -141,6 +144,7 @@ void createList(char* rtmsg, char* msg, std::vector<contact_list*>* contact_list
     setString(rtmsg, &rt);
 }
 
+// sends back a list of all contact lists
 void queryLists(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
     std::string rt;
 
@@ -161,31 +165,156 @@ void queryLists(char* rtmsg, char* msg, std::vector<contact_list*>* contact_list
     setString(rtmsg, &rt);
 }
 
-void joinList(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
-    std::string rt = "join list";
+// adds user to list
+void joinList(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
+    std::string rt;
+
+    // check parameter count
+    if(paramCount(msg) != 2) {
+        rt = "INVALID PARAMETERS";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    // receive parameters
+    std::string msgStr = std::string(msg);
+    std::string clname, cname;
+    param(&clname, &msgStr, 1);
+    param(&cname, &msgStr, 2);
+
+    contact_list* contactList;
+    // check for contact list in server
+    bool clFound = false;
+    for(int i = 0; i < contact_lists->size(); i++) {
+        if((*contact_lists)[i]->name == clname) {
+            contactList = (*contact_lists)[i];
+            clFound = true;
+        }
+    }
+    if(!clFound) {
+        rt = "FAILURE";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    user* contact;
+    // check for contact in server/contact not in message/contact in contact list
+    bool usrFound = false;
+    for(int i = 0; i < database->size(); i++) {
+        if((*database)[i]->name == cname) {
+            contact = (*database)[i];
+            usrFound = true;
+            std::vector<contact_list*>* clists = &((*database)[i]->clists);
+            for(int j = 0; j < clists->size(); j++) {
+                if((*clists)[i]->name == clname || (*clists)[i]->imsgs.size() > 0) {
+                    rt = "FAILURE";
+                    setString(rtmsg, &rt);
+                    return;
+                }
+            }
+            break;
+        }
+    }
+    if(!usrFound) {
+        rt = "FAILURE";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    // add contact to contact list
+    contactList->contacts.push_back(contact);
+    contact->clists.push_back(contactList);
+
+    rt = "SUCCESS";
     setString(rtmsg, &rt);
 }
 
-void leaveList(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
-    std::string rt = "leave list";
+// remove user from list
+void leaveList(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
+    std::string rt;
+
+    // check parameter count
+    if(paramCount(msg) != 2) {
+        rt = "INVALID PARAMETERS";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    // receive parameters
+    std::string msgStr = std::string(msg);
+    std::string clname, cname;
+    param(&clname, &msgStr, 1);
+    param(&cname, &msgStr, 2);
+
+    contact_list* contactList;
+    user* contact;
+    // check for contact list in server/contact not in contact list
+    bool clFound = false, usrFound = false;
+    for(int i = 0; i < contact_lists->size(); i++) {
+        if((*contact_lists)[i]->name == clname) {
+            contactList = (*contact_lists)[i];
+            clFound = true;
+            for(int j = 0; j < (*contact_lists)[i]->contacts.size(); j++) {
+                if((*contact_lists)[i]->contacts[j]->name == cname) {
+                    contact = (*contact_lists)[i]->contacts[j];
+                    usrFound = true;
+                }
+            }
+        }
+    }
+    if(!clFound || !usrFound) {
+        rt = "FAILURE";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    // check if contact is in a message
+    for(int i = 0; i < contact->clists.size(); i++) {
+        if(contact->clists[i]->imsgs.size() > 0) {
+            rt = "FAILURE";
+            setString(rtmsg, &rt);
+            return;
+        }
+    }
+
+    // remove contact from contact list
+    for(int i = 0; i < contactList->contacts.size(); i++) {
+        if(contactList->contacts[i]->name == cname) {
+            contactList->contacts.erase(contactList->contacts.cbegin() + i);
+            break;
+        }
+    }
+    // remove contact list from contact
+    for(int i = 0; i < contact->clists.size(); i++) {
+        if(contact->clists[i]->name == clname) {
+            contact->clists.erase(contact->clists.cbegin() + i);
+            break;
+        }
+    }
+
+    rt = "SUCCESS";
     setString(rtmsg, &rt);
 }
 
+// remove user from server
 void exitServer(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
     std::string rt = "exit server";
     setString(rtmsg, &rt);
 }
 
+// start an imessage in a contact list
 void imStart(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
     std::string rt = "im start";
     setString(rtmsg, &rt);
 }
 
+// close an imessage
 void imComplete(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
     std::string rt = "im complete";
     setString(rtmsg, &rt);
 }
 
+// save state
 void save(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
     std::string rt = "save";
     setString(rtmsg, &rt);
@@ -211,9 +340,9 @@ void execute(char* rtmsg, char* msg, struct sockaddr* clientAddr, std::vector<us
     } else if(command == "query-lists") {
         queryLists(rtmsg, msg, contact_lists);
     } else if(command == "join") {
-        joinList(rtmsg, msg, contact_lists);
+        joinList(rtmsg, msg, database, contact_lists);
     } else if(command == "leave") {
-        leaveList(rtmsg, msg, contact_lists);
+        leaveList(rtmsg, msg, database, contact_lists);
     } else if(command == "exit") {
         exitServer(rtmsg, msg, contact_lists);
     } else if(command == "im-start") {
