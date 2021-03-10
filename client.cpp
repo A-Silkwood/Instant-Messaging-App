@@ -13,7 +13,7 @@ void DieWithError(const char *errorMessage) {
 }
 
 int main(int argc, char *argv[]) {
-    const int RCVMAX = 1400;
+    const int RCVMAX = 10;
 
     int sock;                       // socket
     struct sockaddr_in serverAddr;  // server address
@@ -22,6 +22,7 @@ int main(int argc, char *argv[]) {
 
     struct sockaddr_in clientAddr;  // client address
     unsigned int clientAddrLen;     // client address length
+    std::string message;
     char buffer[RCVMAX+1];          // message buffer
     int respStringLen;
 
@@ -38,7 +39,7 @@ int main(int argc, char *argv[]) {
 
     // create socket
     if((sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-        DieWithError("socket() failed");
+        DieWithError("socket() failed\n");
     }
 
     // construct server address structure
@@ -49,18 +50,20 @@ int main(int argc, char *argv[]) {
 
     // client side loop
     while(buffer != "EXT") {
-        printf("Enter message:\n");
+        printf("Enter message: ");
         std::cin >> buffer;
 
         if(sendto(sock, buffer, strlen(buffer), 0, (struct sockaddr*) &serverAddr, sizeof(serverAddr)) != strlen(buffer)) {
-            DieWithError("sendto() sent a different number of bytes than expected");
+            DieWithError("sendto() sent a different number of bytes than expected\n");
         }
 
         clientAddrLen = sizeof(clientAddr);
 
         if((respStringLen = recvfrom(sock, buffer, RCVMAX, 0, (struct sockaddr*) &clientAddr, &clientAddrLen)) > RCVMAX) {
-            DieWithError("recvfrom() failed");
+            DieWithError("recvfrom() failed\n");
         }
+        buffer[respStringLen] = '\0';
+        printf("Server-Sent: %s\n", buffer);
     }
 
     // close client

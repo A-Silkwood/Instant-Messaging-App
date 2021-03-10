@@ -3,6 +3,7 @@
 #include <cstring>     /* for memset() */
 #include <unistd.h>     /* for close() */
 #include <vector>
+#include <string>
 
 #include <sys/socket.h> /* for socket(), connect(), sendto(), and recvfrom() */
 #include <arpa/inet.h>  /* for sockaddr_in and inet_addr() */
@@ -22,8 +23,13 @@ void DieWithError(const char* errorMessage) {
 // acknowledges client
 void acknowledge(int sock, std::string* message, int msgNum, struct sockaddr_in* clientAddr) {
     // build acknowledgement message
-    char* ackMsg;
-    sprintf(ackMsg, "ACK%d:%s", msgNum, message);
+    std::string msgNumStr = std::to_string(msgNum);
+    char ackMsg[4 + msgNumStr.size() + message->size()];
+    char msgNumCharArr[msgNumStr.size()];
+    char messageCharArr[message->size()];
+    std::strcpy(msgNumCharArr, msgNumStr.c_str());
+    std::strcpy(messageCharArr, message->c_str());
+    std::sprintf(ackMsg, "ACK%s:%s", msgNumCharArr, messageCharArr);
 
     // send acknowledgement
     if(sendto(sock, ackMsg, strlen(ackMsg), 0, (struct sockaddr*) clientAddr, sizeof(*clientAddr)) != strlen(ackMsg)) {
@@ -43,14 +49,18 @@ struct message* getMessage(std::vector<message*>* msgs, std::string* ip) {
 
 // handles receiving messages
 void handleMessage(int sock, std::vector<message*>* msgs, struct sockaddr_in* clientAddr, int msgNum, std::string* content) {
+    // log message in server
     std::string addr = std::string(inet_ntoa((*clientAddr).sin_addr));
+    std::cout << addr << "-Sent: " << *content << std::endl;
+
+    // construct and acknowledge messages
     struct message* msg = getMessage(msgs, &addr);
     if(msg == NULL) {
         // create message
-        message* newMsg = new message;
-        newMsg->addr = std::string(inet_ntoa((*clientAddr).sin_addr));
+        message *newMsg = new message;
+        newMsg->addr = std::string(addr);
         newMsg->lastMsg = msgNum;
-        newMsg->msg = *content;
+        newMsg->msg = std::string(*content);
         msgs->push_back(newMsg);
 
         acknowledge(sock, content, msgNum, clientAddr);
@@ -67,7 +77,7 @@ void handleMessage(int sock, std::vector<message*>* msgs, struct sockaddr_in* cl
 }
 
 int main(int argc, char* argv[]) {
-    const int RECVMAX = 1400;       // longest message to receive
+    const int RECVMAX = 10;       // longest message to receive
     int sock;                       // socket
     unsigned short csPort;          // client-server port
     struct sockaddr_in serverAddr;  // local address
@@ -82,7 +92,7 @@ int main(int argc, char* argv[]) {
 
     // create socket
     if((sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-        DieWithError("socket() failed");
+        DieWithError("socket() failed\n");
     }
 
     // construct local address structure
@@ -93,7 +103,7 @@ int main(int argc, char* argv[]) {
 
     // bind port to local address
     if(bind(sock, (struct sockaddr*) &serverAddr, sizeof(serverAddr)) < 0) {
-        DieWithError("bind() failed");
+        DieWithError("bind() failed\n");
     }
 
     printf("Port server is listening to is: %d\n", csPort);
@@ -109,28 +119,41 @@ int main(int argc, char* argv[]) {
     std::string prefix;                                     // prefix command of message
     int msgNum;                                             // identifier for message
     std::string content;                                    // message content
-
+    bool isOn = true;
     // always on server loop
-    while(prefix != "EXT") {
+    while(isOn) {
         // receive message
-        if((rcvMsgSize = recvfrom(sock, buffer, RECVMAX, 0, (struct sockaddr*) &clientAddr, &clientAddrLen)) < 0) {
-            continue;
+        if ((rcvMsgSize = recvfrom(sock, buffer, RECVMAX, 0, (struct sockaddr *) &clientAddr, &clientAddrLen)) < 0) {
+            DieWithError("rcvfrom() failed\n");
         }
 
         // check buffer
         buffer[rcvMsgSize] = '\0';
         buffStr = std::string(buffer);
         prefix = buffStr.substr(0, 3);
-        msgNum = stoi(buffStr.substr(3, buffStr.find(':', 3) - 3));
-        content = buffStr.substr(buffStr.find(':', 3) + 1);
 
-        // check message type
-        if(prefix == "MSG") {   // construct message
-            handleMessage(sock, &msgs, &clientAddr, msgNum, &content);
-        } else if(prefix == "ACK") { // receive acknowledgement
+        if(buffer[0] == '^') {
+            isOn = false;
+            sendto(sock, "EXT", 0, 0, (struct sockaddr *) &clientAddr, sizeof(clientAddr));
+            continue;
+        }
 
+        if(prefix == "MSG" || prefix == "ACK") {
+            msgNum = stoi(buffStr.substr(3, buffStr.find(':', 3) - 3));
+            content = buffStr.substr(buffStr.find(':', 3) + 1);
+
+            if(prefix == "MSG") {
+                handleMessage(sock, &msgs, &clientAddr, msgNum, &content);
+            } else if(prefix == "ACK") {
+                // unimplemented
+                if (isOn && sendto(sock, buffer, strlen(buffer), 0, (struct sockaddr *) &clientAddr, sizeof(clientAddr)) != strlen(buffer)) {
+                    DieWithError("sendto() sent a different number of bytes than expected\n");
+                }
+            }
         } else {
-            printf("Received invalid message");
+            if (isOn && sendto(sock, buffer, strlen(buffer), 0, (struct sockaddr *) &clientAddr, sizeof(clientAddr)) != strlen(buffer)) {
+                DieWithError("sendto() sent a different number of bytes than expected\n");
+            }
         }
     }
 
