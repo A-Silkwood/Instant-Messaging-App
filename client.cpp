@@ -50,17 +50,26 @@ int main(int argc, char *argv[]) {
 
     // client side loop
     while(buffer != "EXT") {
+        // take input
         printf("Enter message: ");
-        std::cin >> buffer;
+        std::cin >> message;
 
-        if(sendto(sock, buffer, strlen(buffer), 0, (struct sockaddr*) &serverAddr, sizeof(serverAddr)) != strlen(buffer)) {
-            DieWithError("sendto() sent a different number of bytes than expected\n");
-        }
+        int msgID = 1;
+        // message loop
+        while(message.size() > 0) {
+            if(sendto(sock, buffer, strlen(buffer), 0, (struct sockaddr*) &serverAddr, sizeof(serverAddr)) != strlen(buffer)) {
+                DieWithError("sendto() sent a different number of bytes than expected\n");
+            }
 
-        clientAddrLen = sizeof(clientAddr);
+            clientAddrLen = sizeof(clientAddr);
 
-        if((respStringLen = recvfrom(sock, buffer, RCVMAX, 0, (struct sockaddr*) &clientAddr, &clientAddrLen)) > RCVMAX) {
-            DieWithError("recvfrom() failed\n");
+            if((respStringLen = recvfrom(sock, buffer, RCVMAX, 0, (struct sockaddr*) &clientAddr, &clientAddrLen)) > RCVMAX) {
+                DieWithError("recvfrom() failed\n");
+            }
+
+            buffer[respStringLen] = '\0';
+            std::string rcvMsg = std::string(buffer);
+            std::string rcvMsgContent =
         }
         buffer[respStringLen] = '\0';
         printf("Server-Sent: %s\n", buffer);

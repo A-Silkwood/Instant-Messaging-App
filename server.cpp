@@ -8,10 +8,21 @@
 #include <sys/socket.h> /* for socket(), connect(), sendto(), and recvfrom() */
 #include <arpa/inet.h>  /* for sockaddr_in and inet_addr() */
 
-struct message {
-    int lastMsg = 0;
-    std::string addr;
+struct user {
+    std::string name;
+    std::string ip;
+    int port;
+};
+
+struct imessage {
     std::string msg;
+    std::string author;
+};
+
+struct contact_list {
+    std::string name;
+    std::vector<imessage*> imsgs;
+    std::vector<user*> contacts;
 };
 
 // print error and exits
@@ -20,64 +31,79 @@ void DieWithError(const char* errorMessage) {
     exit(1);
 }
 
-// acknowledges client
-void acknowledge(int sock, std::string* message, int msgNum, struct sockaddr_in* clientAddr) {
-    // build acknowledgement message
-    std::string msgNumStr = std::to_string(msgNum);
-    char ackMsg[4 + msgNumStr.size() + message->size()];
-    char msgNumCharArr[msgNumStr.size()];
-    char messageCharArr[message->size()];
-    std::strcpy(msgNumCharArr, msgNumStr.c_str());
-    std::strcpy(messageCharArr, message->c_str());
-    std::sprintf(ackMsg, "ACK%s:%s", msgNumCharArr, messageCharArr);
-
-    // send acknowledgement
-    if(sendto(sock, ackMsg, strlen(ackMsg), 0, (struct sockaddr*) clientAddr, sizeof(*clientAddr)) != strlen(ackMsg)) {
-        DieWithError("sendto() sent a different number of bytes than expected");
-    }
+char* registerUser(char* msg, std::vector<user*>* database) {
+    return "register";
 }
 
-// finds message being built in msgs
-struct message* getMessage(std::vector<message*>* msgs, std::string* ip) {
-    for(int i = 0; i < msgs->size(); i++) {
-        if((*msgs)[i]->addr == *ip) {
-            return (*msgs)[i];
-        }
-    }
-    return NULL;
+char* createList(char* msg, std::vector<contact_list*>* contact_lists) {
+    return "create list";
 }
 
-// handles receiving messages
-void handleMessage(int sock, std::vector<message*>* msgs, struct sockaddr_in* clientAddr, int msgNum, std::string* content) {
-    // log message in server
-    std::string addr = std::string(inet_ntoa((*clientAddr).sin_addr));
-    std::cout << addr << "-Sent: " << *content << std::endl;
+char* queryLists(std::vector<contact_list*>* contact_lists) {
+    return "query lists";
+}
 
-    // construct and acknowledge messages
-    struct message* msg = getMessage(msgs, &addr);
-    if(msg == NULL) {
-        // create message
-        message *newMsg = new message;
-        newMsg->addr = std::string(addr);
-        newMsg->lastMsg = msgNum;
-        newMsg->msg = std::string(*content);
-        msgs->push_back(newMsg);
+char* joinList(char* msg, std::vector<contact_list*>* contact_lists) {
+    return "join list";
+}
 
-        acknowledge(sock, content, msgNum, clientAddr);
-    } else if(msgNum = msg->lastMsg + 1) {
-        // append message
-        msg->msg.append(*content);
-        msg->lastMsg = msgNum;
+char* leaveList(char* msg, std::vector<contact_list*>* contact_lists) {
+    return "leave list";
+}
 
-        acknowledge(sock, content, msgNum, clientAddr);
-    } else if(msgNum <= msg->lastMsg) {
-        // re-acknowledge
-        acknowledge(sock, content, msgNum, clientAddr);
+char* exitServer(char* msg, std::vector<contact_list*>* contact_lists) {
+    return "exit server";
+}
+
+char* imStart(char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
+    return "im start";
+}
+
+char* imComplete(char* msg, std::vector<contact_list*>* contact_lists) {
+    return "im complete";
+}
+
+char* save(char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
+    return "save";
+}
+
+char* execute(char* msg, struct sockaddr* clientAddr, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
+    // receive command
+    std::string msgStr = std::string(msg);
+    int firstSpc = msgStr.find(' ', 0);
+    std::string command;
+    if(firstSpc == -1) {
+        command = std::string(msgStr);
+    } else {
+        command = msgStr.substr(0,firstSpc);
+    }
+
+    // execute proper command
+    if(command == "register") {
+        return registerUser(msg, database);
+    } else if(command == "create") {
+        return createList(msg, contact_lists);
+    } else if(command == "query-lists") {
+        return queryLists(contact_lists);
+    } else if(command == "join") {
+        return joinList(msg, contact_lists);
+    } else if(command == "leave") {
+        return leaveList(msg, contact_lists);
+    } else if(command == "exit") {
+        return exitServer(msg, contact_lists);
+    } else if(command == "im-start") {
+        return imStart(msg, database, contact_lists);
+    } else if(command == "im-complete") {
+        return imComplete(msg, contact_lists);
+    } else if(command == "save") {
+        return save(msg, database, contact_lists);
+    } else {
+        return "Invalid Command";
     }
 }
 
 int main(int argc, char* argv[]) {
-    const int RECVMAX = 10;       // longest message to receive
+    const int RECVMAX = 1400;       // longest message to receive
     int sock;                       // socket
     unsigned short csPort;          // client-server port
     struct sockaddr_in serverAddr;  // local address
@@ -113,15 +139,11 @@ int main(int argc, char* argv[]) {
 
     int rcvMsgSize;                                         // received message size
     char buffer[RECVMAX];                                   // message buffer
-
-    std::vector<message*> msgs;                             // collect messages
-    std::string buffStr;                                    // buffer as a string
-    std::string prefix;                                     // prefix command of message
-    int msgNum;                                             // identifier for message
-    std::string content;                                    // message content
-    bool isOn = true;
+    char* ackBuff;                                          // ack buffer
+    std::vector<user*> database;                            // list of users registered
+    std::vector<contact_list*> contact_lists;               // all contact lists created
     // always on server loop
-    while(isOn) {
+    while(true) {
         // receive message
         if ((rcvMsgSize = recvfrom(sock, buffer, RECVMAX, 0, (struct sockaddr *) &clientAddr, &clientAddrLen)) < 0) {
             DieWithError("rcvfrom() failed\n");
@@ -129,31 +151,11 @@ int main(int argc, char* argv[]) {
 
         // check buffer
         buffer[rcvMsgSize] = '\0';
-        buffStr = std::string(buffer);
-        prefix = buffStr.substr(0, 3);
+        char* ackBuff = execute(buffer, (struct sockaddr*) &clientAddr, &database, &contact_lists);
 
-        if(buffer[0] == '^') {
-            isOn = false;
-            sendto(sock, "EXT", 0, 0, (struct sockaddr *) &clientAddr, sizeof(clientAddr));
-            continue;
-        }
-
-        if(prefix == "MSG" || prefix == "ACK") {
-            msgNum = stoi(buffStr.substr(3, buffStr.find(':', 3) - 3));
-            content = buffStr.substr(buffStr.find(':', 3) + 1);
-
-            if(prefix == "MSG") {
-                handleMessage(sock, &msgs, &clientAddr, msgNum, &content);
-            } else if(prefix == "ACK") {
-                // unimplemented
-                if (isOn && sendto(sock, buffer, strlen(buffer), 0, (struct sockaddr *) &clientAddr, sizeof(clientAddr)) != strlen(buffer)) {
-                    DieWithError("sendto() sent a different number of bytes than expected\n");
-                }
-            }
-        } else {
-            if (isOn && sendto(sock, buffer, strlen(buffer), 0, (struct sockaddr *) &clientAddr, sizeof(clientAddr)) != strlen(buffer)) {
-                DieWithError("sendto() sent a different number of bytes than expected\n");
-            }
+        // send ack
+        if (sendto(sock, ackBuff, strlen(ackBuff), 0, (struct sockaddr *) &clientAddr, sizeof(clientAddr)) != strlen(ackBuff)) {
+            DieWithError("sendto() sent a different number of bytes than expected\n");
         }
     }
 
