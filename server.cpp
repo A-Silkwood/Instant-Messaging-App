@@ -8,17 +8,20 @@
 #include <sys/socket.h> /* for socket(), connect(), sendto(), and recvfrom() */
 #include <arpa/inet.h>  /* for sockaddr_in and inet_addr() */
 
+// represents a registered user
 struct user {
     std::string name;
     std::string ip;
     int port;
 };
 
+// instant message to send out
 struct imessage {
     std::string msg;
     std::string author;
 };
 
+// stores a list of users in a im group
 struct contact_list {
     std::string name;
     std::vector<imessage*> imsgs;
@@ -31,79 +34,202 @@ void DieWithError(const char* errorMessage) {
     exit(1);
 }
 
-char* registerUser(char* msg, std::vector<user*>* database) {
-    return "register";
+// copies string in char arr    // redundant but i am not fixing it
+void setString(char* rtmsg, std::string* msg) {
+    strcpy(rtmsg, msg->c_str());
 }
 
-char* createList(char* msg, std::vector<contact_list*>* contact_lists) {
-    return "create list";
+// counts the amount of parameters in a command
+// assumes command name is not a parameter
+int paramCount(char* str) {
+    int count = 0;
+    for(int i = 0; i < strlen(str); i++) {
+        if(str[i] == ' ') {
+            count++;
+        }
+    }
+    return count;
 }
 
-char* queryLists(std::vector<contact_list*>* contact_lists) {
-    return "query lists";
+void param(std::string* str, std::string* cmd, int param) {
+    int ix = -1;
+    for(int i = 0; i < param; i++) {
+        ix = cmd->find(' ', ix + 1);
+    }
+    ix++;
+    int ixNext = cmd->find(' ', ix);
+    if(ixNext == -1) {
+        *str = cmd->substr(ix);
+    } else {
+        *str = cmd->substr(ix, ixNext - ix);
+    }
 }
 
-char* joinList(char* msg, std::vector<contact_list*>* contact_lists) {
-    return "join list";
+// registers a user in the server
+void registerUser(char* rtmsg, char* msg, std::vector<user*>* database) {
+    std::string rt;
+
+    // check parameter count
+    if(paramCount(msg) != 3) {
+        rt = "INVALID PARAMETERS";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    // receive parameters
+    std::string msgStr = std::string(msg);
+    std::string cname, ip, port;
+    param(&cname, &msgStr, 1);
+    param(&ip, &msgStr, 2);
+    param(&port, &msgStr, 3);
+
+    // check if name is registered already
+    for(int i = 0; i < database->size(); i++) {
+        if((*database)[i]->name == cname) {
+            rt = "FAILURE";
+            setString(rtmsg, &rt);
+            return;
+        }
+    }
+
+    // register user
+    user* usr = new user;
+    usr->name = cname;
+    usr->ip = ip;
+    usr->port = std::stoi(port);
+    // add to database
+    database->push_back(usr);
+
+    // success
+    rt = "SUCCESS";
+    setString(rtmsg, &rt);
 }
 
-char* leaveList(char* msg, std::vector<contact_list*>* contact_lists) {
-    return "leave list";
+void createList(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
+    std::string rt;
+
+    // check parameter count
+    if(paramCount(msg) != 1) {
+        rt = "INVALID PARAMETERS";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    // receive parameter
+    std::string msgStr = std::string(msg);
+    std::string clName;
+    param(&clName, &msgStr, 1);
+    std::cout << clName << std::endl;
+
+    // check if name is already in use
+    for(int i = 0; i < contact_lists->size(); i++) {
+        if((*contact_lists)[i]->name == clName) {
+            rt = "FAILURE";
+            setString(rtmsg, &rt);
+            return;
+        }
+    }
+
+    // create contact list
+    contact_list* cl = new contact_list;
+    cl->name = clName;
+    // add to contact lists
+    contact_lists->push_back(cl);
+
+    // success
+    rt = "SUCCESS";
+    setString(rtmsg, &rt);
 }
 
-char* exitServer(char* msg, std::vector<contact_list*>* contact_lists) {
-    return "exit server";
+void queryLists(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
+    std::string rt;
+
+    // check parameter count
+    if(paramCount(msg) != 0) {
+        rt = "INVALID PARAMETERS";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    // construct return string
+    rt.append(std::to_string(contact_lists->size()));
+    for(int i = 0; i < contact_lists->size(); i++) {
+        rt.append(" ");
+        rt.append((*contact_lists)[i]->name);
+    }
+
+    setString(rtmsg, &rt);
 }
 
-char* imStart(char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
-    return "im start";
+void joinList(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
+    std::string rt = "join list";
+    setString(rtmsg, &rt);
 }
 
-char* imComplete(char* msg, std::vector<contact_list*>* contact_lists) {
-    return "im complete";
+void leaveList(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
+    std::string rt = "leave list";
+    setString(rtmsg, &rt);
 }
 
-char* save(char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
-    return "save";
+void exitServer(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
+    std::string rt = "exit server";
+    setString(rtmsg, &rt);
 }
 
-char* execute(char* msg, struct sockaddr* clientAddr, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
+void imStart(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
+    std::string rt = "im start";
+    setString(rtmsg, &rt);
+}
+
+void imComplete(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
+    std::string rt = "im complete";
+    setString(rtmsg, &rt);
+}
+
+void save(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
+    std::string rt = "save";
+    setString(rtmsg, &rt);
+}
+
+// possible server commands that can be received
+void execute(char* rtmsg, char* msg, struct sockaddr* clientAddr, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
     // receive command
     std::string msgStr = std::string(msg);
     int firstSpc = msgStr.find(' ', 0);
     std::string command;
     if(firstSpc == -1) {
-        command = std::string(msgStr);
+        command = msgStr.substr(0, msgStr.size()-1);
     } else {
         command = msgStr.substr(0,firstSpc);
     }
 
     // execute proper command
     if(command == "register") {
-        return registerUser(msg, database);
+        registerUser(rtmsg, msg, database);
     } else if(command == "create") {
-        return createList(msg, contact_lists);
+        createList(rtmsg, msg, contact_lists);
     } else if(command == "query-lists") {
-        return queryLists(contact_lists);
+        queryLists(rtmsg, msg, contact_lists);
     } else if(command == "join") {
-        return joinList(msg, contact_lists);
+        joinList(rtmsg, msg, contact_lists);
     } else if(command == "leave") {
-        return leaveList(msg, contact_lists);
+        leaveList(rtmsg, msg, contact_lists);
     } else if(command == "exit") {
-        return exitServer(msg, contact_lists);
+        exitServer(rtmsg, msg, contact_lists);
     } else if(command == "im-start") {
-        return imStart(msg, database, contact_lists);
+        imStart(rtmsg, msg, database, contact_lists);
     } else if(command == "im-complete") {
-        return imComplete(msg, contact_lists);
+        imComplete(rtmsg, msg, contact_lists);
     } else if(command == "save") {
-        return save(msg, database, contact_lists);
+        save(rtmsg, msg, database, contact_lists);
     } else {
-        return "Invalid Command";
+        std::string rt = "Invalid Command";
+        setString(rtmsg, &rt);
     }
 }
 
 int main(int argc, char* argv[]) {
-    const int RECVMAX = 1400;       // longest message to receive
+    const int RECVMAX = 1000;       // longest message to receive
     int sock;                       // socket
     unsigned short csPort;          // client-server port
     struct sockaddr_in serverAddr;  // local address
@@ -134,16 +260,17 @@ int main(int argc, char* argv[]) {
 
     printf("Port server is listening to is: %d\n", csPort);
 
-    struct sockaddr_in clientAddr;                          // client address
-    unsigned int clientAddrLen = sizeof(clientAddr);        // client address length
+    struct sockaddr_in clientAddr;              // client address
+    unsigned int clientAddrLen;                 // client address length
 
-    int rcvMsgSize;                                         // received message size
-    char buffer[RECVMAX];                                   // message buffer
-    char* ackBuff;                                          // ack buffer
-    std::vector<user*> database;                            // list of users registered
-    std::vector<contact_list*> contact_lists;               // all contact lists created
+    int rcvMsgSize;                             // received message size
+    char buffer[RECVMAX];                       // message buffer
+    char ackBuff[RECVMAX];                      // ack buffer
+    std::vector<user*> database;                // list of users registered
+    std::vector<contact_list*> contact_lists;   // all contact lists created
     // always on server loop
-    while(true) {
+    for(;;) {
+        clientAddrLen = sizeof(clientAddr);
         // receive message
         if ((rcvMsgSize = recvfrom(sock, buffer, RECVMAX, 0, (struct sockaddr *) &clientAddr, &clientAddrLen)) < 0) {
             DieWithError("rcvfrom() failed\n");
@@ -151,10 +278,12 @@ int main(int argc, char* argv[]) {
 
         // check buffer
         buffer[rcvMsgSize] = '\0';
-        char* ackBuff = execute(buffer, (struct sockaddr*) &clientAddr, &database, &contact_lists);
+        std::cout << "Client-Sent: " << buffer;
+        // execute server command
+        execute(ackBuff, buffer, (struct sockaddr*) &clientAddr, &database, &contact_lists);
 
         // send ack
-        if (sendto(sock, ackBuff, strlen(ackBuff), 0, (struct sockaddr *) &clientAddr, sizeof(clientAddr)) != strlen(ackBuff)) {
+        if(sendto(sock, ackBuff, strlen(ackBuff), 0, (struct sockaddr*) &clientAddr, sizeof(clientAddr)) != strlen(ackBuff)) {
             DieWithError("sendto() sent a different number of bytes than expected\n");
         }
     }
