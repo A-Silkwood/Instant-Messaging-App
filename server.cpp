@@ -355,7 +355,6 @@ void exitServer(char* rtmsg, char* msg, std::vector<user*>* database) {
 // start an imessage in a contact list
 void imStart(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
     std::string rt = "im start";
-    setString(rtmsg, &rt);
 
     // check parameter count
     if(paramCount(msg) != 2) {
@@ -384,8 +383,8 @@ void imStart(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<c
                 }
             }
 
-            // construct im response
             if(usrInCL) {
+                // construct im response
                 // get contact number
                 rt = std::to_string((*contact_lists)[i]->contacts.size());
                 rt.append(" ");
@@ -406,9 +405,16 @@ void imStart(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<c
                         rt.append(std::to_string((*contact_lists)[i]->contacts[j]->port));
                     }
                 }
+
+                // add im to clist
+                imessage* im = new imessage;
+                im->clname = clname;
+                im->uname = cname;
+                (*contact_lists)[i]->imsgs.push_back(im);
             } else {
                 rt = "0";
             }
+            break;
         }
     }
 
@@ -417,7 +423,42 @@ void imStart(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<c
 
 // close an imessage
 void imComplete(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
-    std::string rt = "im complete";
+    std::string rt = "im start";
+
+    // check parameter count
+    if(paramCount(msg) != 2) {
+        rt = "INVALID PARAMETERS";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    // receive parameter
+    std::string msgStr = std::string(msg);
+    std::string clname, cname;
+    param(&clname, &msgStr, 1);
+    param(&cname, &msgStr, 2);
+
+    // find im record and delete it if it exists
+    bool imExist = false;
+    for(int i = 0; i < contact_lists->size(); i++) {
+        if((*contact_lists)[i]->name == clname) {
+            for(int j = 0; j < (*contact_lists)[i]->imsgs.size(); j++) {
+                if((*contact_lists)[i]->imsgs[j]->uname == cname) {
+                    imExist = true;
+                    (*contact_lists)[i]->imsgs.erase((*contact_lists)[i]->imsgs.cbegin() + j);
+                }
+                break;
+            }
+        }
+        break;
+    }
+
+    if(imExist) {
+        rt = "SUCCESS";
+    } else {
+        rt = "FAILURE";
+    }
+
     setString(rtmsg, &rt);
 }
 
