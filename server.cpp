@@ -423,7 +423,7 @@ void imStart(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<c
 
 // close an imessage
 void imComplete(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
-    std::string rt = "im start";
+    std::string rt;
 
     // check parameter count
     if(paramCount(msg) != 2) {
@@ -500,7 +500,7 @@ void execute(char* rtmsg, char* msg, struct sockaddr* clientAddr, std::vector<us
     } /*else if(command == "save") {
         save(rtmsg, msg, database, contact_lists);
     } */else {
-        std::string rt = "Invalid Command";
+        std::string rt = "INVALID COMMAND";
         setString(rtmsg, &rt);
     }
 }

@@ -14,12 +14,10 @@ void DieWithError(const char *errorMessage) {
 
 int main(int argc, char *argv[]) {
     const int RCVMAX = 1000;
-
     int sock;                       // socket
     struct sockaddr_in serverAddr;  // server address
     unsigned short csPort;          // client-server port
     char *serverIP;                 // server IP address
-
     struct sockaddr_in clientAddr;  // client address
     unsigned int clientAddrLen;     // client address length
     std::string message;
@@ -53,7 +51,7 @@ int main(int argc, char *argv[]) {
         // take input
         printf("Enter message: ");
         fgets(buffer, RCVMAX, stdin);
-        //std::cin >> message;
+
 
         if(sendto(sock, buffer, strlen(buffer), 0, (struct sockaddr*) &serverAddr, sizeof(serverAddr)) != strlen(buffer)) {
             DieWithError("sendto() sent a different number of bytes than expected\n");
