@@ -230,7 +230,7 @@ void joinList(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<
 }
 
 // remove user from list
-void leaveList(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
+void leaveList(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
     std::string rt;
 
     // check parameter count
@@ -297,8 +297,58 @@ void leaveList(char* rtmsg, char* msg, std::vector<user*>* database, std::vector
 }
 
 // remove user from server
-void exitServer(char* rtmsg, char* msg, std::vector<contact_list*>* contact_lists) {
-    std::string rt = "exit server";
+void exitServer(char* rtmsg, char* msg, std::vector<user*>* database) {
+    std::string rt;
+
+    // check parameter count
+    if(paramCount(msg) != 1) {
+        rt = "INVALID PARAMETERS";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    // receive parameter
+    std::string msgStr = std::string(msg);
+    std::string cname;
+    param(&cname, &msgStr, 1);
+
+    // get contact
+    user* contact = NULL;
+    for(int i = 0; i < database->size(); i++) {
+        if((*database)[i]->name == cname) {
+            contact = (*database)[i];
+        }
+    }
+
+    // skip to success if user does not exist
+    if(contact != NULL) {
+        // check if user is in an outgoing message
+        for(int i = 0; i < contact->clists.size(); i++) {
+            if(contact->clists[i]->imsgs.size() > 0) {
+                rt = "FAILURE";
+                setString(rtmsg, &rt);
+                return;
+            }
+        }
+
+        // remove user from server
+        // remove user from contact lists
+        for(int i = 0; i < contact->clists.size(); i++) {
+            for(int j = 0; j < contact->clists[i]->contacts.size(); j++) {
+                if(contact->clists[i]->contacts[j]->name == cname) {
+                    contact->clists[i]->contacts.erase(contact->clists[i]->contacts.cbegin() + j);
+                }
+            }
+        }
+        // remove user from database
+        for(int i = 0; i < database->size(); i++) {
+            if((*database)[i]->name == cname) {
+                database->erase(database->cbegin() + i);
+            }
+        }
+    }
+
+    rt = "SUCCESS";
     setString(rtmsg, &rt);
 }
 
@@ -342,9 +392,9 @@ void execute(char* rtmsg, char* msg, struct sockaddr* clientAddr, std::vector<us
     } else if(command == "join") {
         joinList(rtmsg, msg, database, contact_lists);
     } else if(command == "leave") {
-        leaveList(rtmsg, msg, database, contact_lists);
+        leaveList(rtmsg, msg, contact_lists);
     } else if(command == "exit") {
-        exitServer(rtmsg, msg, contact_lists);
+        exitServer(rtmsg, msg, database);
     } else if(command == "im-start") {
         imStart(rtmsg, msg, database, contact_lists);
     } else if(command == "im-complete") {
