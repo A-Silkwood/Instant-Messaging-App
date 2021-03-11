@@ -356,6 +356,63 @@ void exitServer(char* rtmsg, char* msg, std::vector<user*>* database) {
 void imStart(char* rtmsg, char* msg, std::vector<user*>* database, std::vector<contact_list*>* contact_lists) {
     std::string rt = "im start";
     setString(rtmsg, &rt);
+
+    // check parameter count
+    if(paramCount(msg) != 2) {
+        rt = "INVALID PARAMETERS";
+        setString(rtmsg, &rt);
+        return;
+    }
+
+    // receive parameter
+    std::string msgStr = std::string(msg);
+    std::string clname, cname;
+    param(&clname, &msgStr, 1);
+    param(&cname, &msgStr, 2);
+
+    // construct im
+    for(int i = 0; i < contact_lists->size(); i++) {
+        if((*contact_lists)[i]->name == clname) {
+            // check if user is in the contact list
+            bool usrInCL = false;
+            user* contact;
+            for(int j = 0; j < (*contact_lists)[i]->contacts.size(); j++) {
+                if((*contact_lists)[i]->contacts[j]->name == cname) {
+                    usrInCL = true;
+                    contact = (*contact_lists)[i]->contacts[j];
+                    break;
+                }
+            }
+
+            // construct im response
+            if(usrInCL) {
+                // get contact number
+                rt = std::to_string((*contact_lists)[i]->contacts.size());
+                rt.append(" ");
+                // add author first
+                rt.append(contact->name);
+                rt.append(" ");
+                rt.append(contact->ip);
+                rt.append(" ");
+                rt.append(std::to_string(contact->port));
+                // add every other contact
+                for(int j = 0; j < (*contact_lists)[i]->contacts.size(); j++) {
+                    if((*contact_lists)[i]->contacts[j]->name != cname) {
+                        rt.append("\t");
+                        rt.append((*contact_lists)[i]->contacts[j]->name);
+                        rt.append(" ");
+                        rt.append((*contact_lists)[i]->contacts[j]->ip);
+                        rt.append(" ");
+                        rt.append(std::to_string((*contact_lists)[i]->contacts[j]->port));
+                    }
+                }
+            } else {
+                rt = "0";
+            }
+        }
+    }
+
+    setString(rtmsg, &rt);
 }
 
 // close an imessage
