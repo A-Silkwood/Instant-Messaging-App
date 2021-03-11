@@ -1,12 +1,12 @@
-#include <iostream>      /* for printf() and fprintf() */
-#include <cstdlib>     /* for atoi() and exit() */
-#include <cstring>     /* for memset() */
-#include <unistd.h>     /* for close() */
+#include <iostream>
+#include <cstdlib>
+#include <cstring>
+#include <unistd.h>
 #include <vector>
 #include <string>
 
-#include <sys/socket.h> /* for socket(), connect(), sendto(), and recvfrom() */
-#include <arpa/inet.h>  /* for sockaddr_in and inet_addr() */
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
 struct contact_list;
 
@@ -497,9 +497,9 @@ void execute(char* rtmsg, char* msg, struct sockaddr* clientAddr, std::vector<us
         imStart(rtmsg, msg, database, contact_lists);
     } else if(command == "im-complete") {
         imComplete(rtmsg, msg, contact_lists);
-    } else if(command == "save") {
+    } /*else if(command == "save") {
         save(rtmsg, msg, database, contact_lists);
-    } else {
+    } */else {
         std::string rt = "Invalid Command";
         setString(rtmsg, &rt);
     }
@@ -564,8 +564,4 @@ int main(int argc, char* argv[]) {
             DieWithError("sendto() sent a different number of bytes than expected\n");
         }
     }
-
-    // close server
-    close(sock);
-    exit(0);
 }
